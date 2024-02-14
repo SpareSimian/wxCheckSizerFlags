@@ -134,5 +134,6 @@
   </ImportGroup>
   <ImportGroup Label="Dependencies">
     <Import Project="$(WXWIN)\wxwidgets.props" />
+    <Import Project="boost.props" />
   </ImportGroup>
 </Project>

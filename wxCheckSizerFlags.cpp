@@ -4,9 +4,20 @@
 
 #include <iostream>
 #include <string>
+#include <map>
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <sstream>
+
+#include <boost/assign/list_inserter.hpp>
+
+// this becomes available in standard  C++20
+inline bool ends_with(std::string const & value, std::string const & ending)
+{
+   if (ending.size() > value.size()) return false;
+   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
+}
 
 namespace wxFB
 {
@@ -25,12 +36,22 @@ typedef std::vector<std::shared_ptr<Property> > Properties;
 
 struct Object
 {
-   Object(const wxXmlNode& node, unsigned depth);
-   unsigned depth;
+   Object(const wxXmlNode& node, const wxXmlNode& nodeRoot);
+   int depth;
+   int lineNumber;
    std::string className;
    bool expanded;
    Objects children;
    Properties properties;
+
+   std::string getProperty(const std::string& name) const;
+   void checkSizerFlags();
+   bool isSizerType() const { return ends_with(className, "Sizer"); }
+   bool isGridSizerType() const { return ends_with(className, "GridSizer"); }
+   bool isBoxSizerType() const { return ends_with(className, "BoxSizer"); }
+   int getFlags() const;
+   void assertValidSizerFlags() const;
+   void showInvalidFlags(const std::string& msg) const;
 };
 
 
@@ -69,9 +90,10 @@ void CheckSizerFlagsApp::OnInitCmdLine(wxCmdLineParser& parser)
    parser.SetDesc(cmdLineDesc);
 }
 
-wxFB::Object::Object(const wxXmlNode& nodeObject, unsigned depth_) :
-    depth(depth_)
+wxFB::Object::Object(const wxXmlNode& nodeObject, const wxXmlNode& nodeRoot)
 {
+   depth = nodeObject.GetDepth(const_cast<wxXmlNode*>(&nodeRoot));
+   lineNumber = nodeObject.GetLineNumber();
    for (const wxXmlAttribute* attr = nodeObject.GetAttributes();
         attr;
         attr = attr->GetNext())
@@ -89,7 +111,7 @@ wxFB::Object::Object(const wxXmlNode& nodeObject, unsigned depth_) :
         nodeChild = nodeChild->GetNext())
    {
       if ("object" == nodeChild->GetName())
-         children.emplace_back(new wxFB::Object(*nodeChild, 1 + depth));
+         children.emplace_back(new wxFB::Object(*nodeChild, nodeRoot));
       else if ("property" == nodeChild->GetName())
          properties.emplace_back(new wxFB::Property(*nodeChild));
       else
@@ -120,7 +142,7 @@ wxFB::Project::Project(const wxXmlNode& nodeRoot)
       if ("FileVersion" == nodeChild->GetName())
          ; // ignore
       else if ("object" == nodeChild->GetName())
-         objects.emplace_back(new wxFB::Object(*nodeChild, 0));
+         objects.emplace_back(new wxFB::Object(*nodeChild, nodeRoot));
       else
          std::cout << "\nUnrecognized node name " << nodeChild->GetName() << '\n';
 }
@@ -137,6 +159,13 @@ std::ostream& operator <<(std::ostream& os, const wxFB::Object& object)
    return os;
 }
 
+std::ostream& operator <<(std::ostream& os, const wxFB::Project& project)
+{
+   for (auto p : project.objects)
+      os << *p;
+   return os;
+}
+
 int CheckSizerFlagsApp::OnRun()
 {
    const wxString fileName(argv[1]);
@@ -148,6 +177,138 @@ int CheckSizerFlagsApp::OnRun()
    // build the object tree
    wxFB::Project project(*nodeRoot);
    for (auto p : project.objects)
-      std::cout << *p;
+      p->checkSizerFlags();
    return 0;
 }
+
+void wxFB::Object::checkSizerFlags()
+{
+   // see the asserts in wxWidgets/src/common/sizer.cpp
+   if (isSizerType())
+      assertValidSizerFlags();
+   // see wxGridSizer::DoInsert
+   if (isGridSizerType())
+   {
+      // check for too many children for fixed column+row count
+      // check for children with EXPAND to be able to expand
+   }
+   if (isBoxSizerType())
+   {
+      // see wxBoxSizer::DoInsert
+   }
+      
+}
+
+static std::string to_hex_string(int v)
+{
+   std::ostringstream ss;
+   ss << "0x" << std::hex << v;
+   return ss.str();
+}
+
+void wxFB::Object::assertValidSizerFlags() const
+{
+   static const int SIZER_FLAGS_MASK
+         = 0
+           | wxCENTRE
+           | wxHORIZONTAL
+           | wxVERTICAL
+           | wxLEFT
+           | wxRIGHT
+           | wxUP
+           | wxDOWN
+           | wxALIGN_NOT
+           | wxALIGN_CENTER_HORIZONTAL
+           | wxALIGN_RIGHT
+           | wxALIGN_BOTTOM
+           | wxALIGN_CENTER_VERTICAL
+           | wxFIXED_MINSIZE
+           | wxRESERVE_SPACE_EVEN_IF_HIDDEN
+           | wxSTRETCH_NOT
+           | wxSHRINK
+           | wxGROW
+           | wxSHAPED;
+   const int flags = getFlags();
+   if ((flags & SIZER_FLAGS_MASK) != flags)
+      showInvalidFlags("invalid flags not within " + to_hex_string(flags));
+}
+
+// this returns a vector of string_views so essentially pointers into
+// the original string for efficiency. With an empty input string, the
+// result will include a single empty string.
+
+static auto splitString(const std::string& in, char sep)
+{
+   std::vector<std::string> r;
+   r.reserve(std::count(in.begin(), in.end(), sep) + 1); // optional
+   for (auto p = in.begin();; ++p) {
+      auto q = p;
+      p = std::find(p, in.end(), sep);
+      r.emplace_back(q, p);
+      if (p == in.end())
+         return r;
+   }
+}
+
+static std::map<std::string, int> flagNameMap;
+
+static void initFlagNameMap()
+{
+   if (0 == flagNameMap.size())
+      boost::assign::insert(flagNameMap)
+            ("wxCENTRE", wxCENTRE)
+            ("wxHORIZONTAL", wxHORIZONTAL)
+            ("wxVERTICAL", wxVERTICAL)
+            ("wxLEFT", wxLEFT)
+            ("wxRIGHT", wxRIGHT)
+            ("wxUP", wxUP)
+            ("wxDOWN", wxDOWN)
+            ("wxALIGN_NOT", wxALIGN_NOT)
+            ("wxALIGN_CENTER_HORIZONTAL", wxALIGN_CENTER_HORIZONTAL)
+            ("wxALIGN_RIGHT", wxALIGN_RIGHT)
+            ("wxALIGN_BOTTOM", wxALIGN_BOTTOM)
+            ("wxALIGN_CENTER_VERTICAL", wxALIGN_CENTER_VERTICAL)
+            ("wxFIXED_MINSIZE", wxFIXED_MINSIZE)
+            ("wxRESERVE_SPACE_EVEN_IF_HIDDEN", wxRESERVE_SPACE_EVEN_IF_HIDDEN)
+            ("wxSTRETCH_NOT", wxSTRETCH_NOT)
+            ("wxSHRINK", wxSHRINK)
+            ("wxGROW", wxGROW)
+            ("wxSHAPED", wxSHAPED)
+            ("wxEXPAND", wxEXPAND)
+            ;
+}
+
+int wxFB::Object::getFlags() const
+{
+   initFlagNameMap();
+   // can't use a temporary because splitString will return pointers
+   // into this
+   const std::string flagsProperty = getProperty("flag");
+   auto flagNames = splitString(flagsProperty, '|');
+   int flags = 0;
+   for (auto flagName : flagNames)
+   {
+      if ("" == flagName)
+         continue;
+      auto p = flagNameMap.find(flagName);
+      if (flagNameMap.end() == p)
+         showInvalidFlags("unknown flag " + flagName);
+      else
+         flags |= p->second;
+   }
+   return flags;
+}
+
+void wxFB::Object::showInvalidFlags(const std::string& msg) const
+{
+   std::cout << "Object " << className << " at  line " << lineNumber << ": " << msg << '\n';
+}
+
+std::string wxFB::Object::getProperty(const std::string& name) const
+{
+   for (auto p : properties)
+      if (name == p->name)
+         return p->value;
+   return "";
+}
+
