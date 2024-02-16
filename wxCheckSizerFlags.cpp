@@ -277,11 +277,17 @@ void wxFB::Object::assertValidSizerFlags() const
            | wxRIGHT
            | wxUP
            | wxDOWN
+           | wxTOP
+           | wxBOTTOM
            | wxALIGN_NOT
            | wxALIGN_CENTER_HORIZONTAL
            | wxALIGN_RIGHT
            | wxALIGN_BOTTOM
            | wxALIGN_CENTER_VERTICAL
+           | wxALIGN_LEFT
+           | wxALIGN_TOP
+           | wxALIGN_CENTER
+           | wxALIGN_CENTRE
            | wxFIXED_MINSIZE
            | wxRESERVE_SPACE_EVEN_IF_HIDDEN
            | wxSTRETCH_NOT
@@ -323,11 +329,17 @@ static void initFlagNameMap()
             ("wxRIGHT", wxRIGHT)
             ("wxUP", wxUP)
             ("wxDOWN", wxDOWN)
+            ("wxTOP", wxTOP)
+            ("wxBOTTOM", wxBOTTOM)
             ("wxALIGN_NOT", wxALIGN_NOT)
             ("wxALIGN_CENTER_HORIZONTAL", wxALIGN_CENTER_HORIZONTAL)
             ("wxALIGN_RIGHT", wxALIGN_RIGHT)
             ("wxALIGN_BOTTOM", wxALIGN_BOTTOM)
             ("wxALIGN_CENTER_VERTICAL", wxALIGN_CENTER_VERTICAL)
+            ("wxALIGN_LEFT", wxALIGN_LEFT)
+            ("wxALIGN_TOP", wxALIGN_TOP)
+            ("wxALIGN_CENTER", wxALIGN_CENTER)
+            ("wxALIGN_CENTRE", wxALIGN_CENTRE)
             ("wxFIXED_MINSIZE", wxFIXED_MINSIZE)
             ("wxRESERVE_SPACE_EVEN_IF_HIDDEN", wxRESERVE_SPACE_EVEN_IF_HIDDEN)
             ("wxSTRETCH_NOT", wxSTRETCH_NOT)
