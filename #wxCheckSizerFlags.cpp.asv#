@@ -244,7 +244,7 @@ void wxFB::Object::checkSizerFlags()
          if (flags & (wxALIGN_RIGHT | wxALIGN_CENTRE_HORIZONTAL |
                       wxALIGN_BOTTOM | wxALIGN_CENTRE_VERTICAL))
             showInvalidFlags("wxEXPAND overrides alignment flags in box sizers");
-   }      
+   } // isBoxSizerType      
 }
 
 static std::string to_hex_string(int v)
