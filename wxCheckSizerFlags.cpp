@@ -38,14 +38,16 @@ typedef std::vector<std::shared_ptr<Property> > Properties;
 
 struct Object
 {
-   Object(const wxXmlNode& node, const wxXmlNode& nodeRoot);
+   Object(const wxXmlNode& node, const wxXmlNode& nodeRoot, const Object* parent = NULL);
+
    int depth;
    int lineNumber;
    std::string className;
    bool expanded;
    Objects children;
    Properties properties;
-
+   const Object* parent; // non-owning pointer!
+   
    std::string getProperty(const std::string& name) const;
    int getIntProperty(const std::string& name) const;
    void checkSizerFlags();
@@ -55,6 +57,7 @@ struct Object
    int getFlags() const;
    void assertValidSizerFlags() const;
    void showInvalidFlags(const std::string& msg) const;
+   std::string getHierarchy() const;
 };
 
 
@@ -93,7 +96,8 @@ void CheckSizerFlagsApp::OnInitCmdLine(wxCmdLineParser& parser)
    parser.SetDesc(cmdLineDesc);
 }
 
-wxFB::Object::Object(const wxXmlNode& nodeObject, const wxXmlNode& nodeRoot)
+wxFB::Object::Object(const wxXmlNode& nodeObject, const wxXmlNode& nodeRoot, const Object* parent_) :
+    parent(parent_)
 {
    depth = nodeObject.GetDepth(const_cast<wxXmlNode*>(&nodeRoot));
    lineNumber = nodeObject.GetLineNumber();
@@ -114,7 +118,7 @@ wxFB::Object::Object(const wxXmlNode& nodeObject, const wxXmlNode& nodeRoot)
         nodeChild = nodeChild->GetNext())
    {
       if ("object" == nodeChild->GetName())
-         children.emplace_back(new wxFB::Object(*nodeChild, nodeRoot));
+         children.emplace_back(new wxFB::Object(*nodeChild, nodeRoot, this));
       else if ("property" == nodeChild->GetName())
          properties.emplace_back(new wxFB::Property(*nodeChild));
       else if ("event" == nodeChild->GetName())
@@ -358,9 +362,25 @@ int wxFB::Object::getFlags() const
    return flags;
 }
 
+std::string wxFB::Object::getHierarchy() const
+{
+   // display hierarchy
+   std::string ancestors;
+   if (parent)
+      ancestors = parent->getHierarchy();
+   ancestors += '/' + className;
+   const std::string myName = getProperty("name");
+   if ("" != myName)
+      ancestors += '(' + myName + ')';
+   return ancestors;
+}
+
 void wxFB::Object::showInvalidFlags(const std::string& msg) const
 {
-   std::cout << "Object " << className << " at  line " << lineNumber << ": " << msg << '\n';
+   if (("sizeritem" == className) && (1 == children.size()))
+       children[0]->showInvalidFlags(msg);
+   else
+      std::cout << "Object " << getHierarchy() << " at line " << lineNumber << ": " << msg << '\n';
 }
 
 std::string wxFB::Object::getProperty(const std::string& name) const
