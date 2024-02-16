@@ -11,8 +11,7 @@
 #include <sstream>
 
 #include <boost/assign/list_inserter.hpp>
-
-#include "trim.h"
+#include <boost/algorithm/string/trim.hpp>
 
 // this becomes available in standard  C++20
 inline bool ends_with(std::string const & value, std::string const & ending)
@@ -350,7 +349,7 @@ int wxFB::Object::getFlags() const
    int flags = 0;
    for (auto flagName : flagNames)
    {
-      stackoverflow::trim(flagName); // trim whitespace
+      boost::trim(flagName); // trim whitespace
       if ("" == flagName)
          continue;
       auto p = flagNameMap.find(flagName);
