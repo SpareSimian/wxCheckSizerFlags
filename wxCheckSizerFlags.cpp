@@ -12,6 +12,8 @@
 
 #include <boost/assign/list_inserter.hpp>
 
+#include "trim.h"
+
 // this becomes available in standard  C++20
 inline bool ends_with(std::string const & value, std::string const & ending)
 {
@@ -115,6 +117,8 @@ wxFB::Object::Object(const wxXmlNode& nodeObject, const wxXmlNode& nodeRoot)
          children.emplace_back(new wxFB::Object(*nodeChild, nodeRoot));
       else if ("property" == nodeChild->GetName())
          properties.emplace_back(new wxFB::Property(*nodeChild));
+      else if ("event" == nodeChild->GetName())
+         ; // ignored
       else
          std::cout << "\nUnrecognized node name " << nodeChild->GetName() << '\n';
    }
@@ -208,43 +212,48 @@ void wxFB::Object::checkSizerFlags()
             const bool ok = !(flags & (wxALIGN_BOTTOM | wxALIGN_CENTRE_VERTICAL)) || 
                             !(flags & (wxALIGN_RIGHT | wxALIGN_CENTRE_HORIZONTAL));
             if (!ok)
-               showInvalidFlags("wxEXPAND flag in child sizer will be overridden by alignment flags, remove "
-                                "either wxEXPAND or the alignment in at least one direction");
+               p->showInvalidFlags("wxEXPAND flag in child sizer will be overridden by alignment flags, remove "
+                                   "either wxEXPAND or the alignment in at least one direction");
          }
       }
    }
    if (isBoxSizerType())
    {
       // see wxBoxSizer::DoInsert
-      const int flags = getFlags();
       const std::string orient = getProperty("orient");
       const bool isVertical = "wxVERTICAL" == orient;
       const bool isHorizontal = "wxHORIZONTAL" == orient;
-      if (isVertical)
+      for (auto p : children)
       {
-         static const std::string msg("only horizontal alignment flags can be used in vertical sizers");
-         if (wxALIGN_BOTTOM & flags)
-            showInvalidFlags(msg);
-         if (!(flags & wxALIGN_CENTRE_HORIZONTAL))
-            if (flags & wxALIGN_CENTRE_VERTICAL)
-               showInvalidFlags(msg);
+         const int flags = p->getFlags();
+         if (isVertical)
+         {
+            static const std::string msg("only horizontal alignment flags can be used in child sizers of vertical box sizers");
+            if (wxALIGN_BOTTOM & flags)
+               p->showInvalidFlags(msg);
+            if (!(flags & wxALIGN_CENTRE_HORIZONTAL))
+               if (flags & wxALIGN_CENTRE_VERTICAL)
+                  p->showInvalidFlags(msg);
+         }
+         else if (isHorizontal)
+         {
+            static const std::string msg("only vertical alignment flags can be used in child sizers of horizontal box sizers");
+            if (wxALIGN_RIGHT & flags)
+               p->showInvalidFlags(msg);
+            if (!(flags & wxALIGN_CENTRE_VERTICAL))
+               if (flags & wxALIGN_CENTRE_HORIZONTAL)
+                  p->showInvalidFlags(msg);
+         }
+         else
+            p->showInvalidFlags("missing orient property in wxBoxSizer");
+         if ( (flags & wxEXPAND) && !(flags & wxSHAPED) )
+            if (flags & (wxALIGN_RIGHT | wxALIGN_CENTRE_HORIZONTAL |
+                         wxALIGN_BOTTOM | wxALIGN_CENTRE_VERTICAL))
+               p->showInvalidFlags("wxEXPAND overrides alignment flags in box sizers");
       }
-      else if (isHorizontal)
-      {
-         static const std::string msg("only vertical alignment flags can be used in horizontal sizers");
-         if (wxALIGN_RIGHT & flags)
-            showInvalidFlags(msg);
-         if (!(flags & wxALIGN_CENTRE_VERTICAL))
-            if (flags & wxALIGN_CENTRE_HORIZONTAL)
-               showInvalidFlags(msg);
-      }
-      else
-         showInvalidFlags("missing orient property in wxBoxSizer");
-      if ( (flags & wxEXPAND) && !(flags & wxSHAPED) )
-         if (flags & (wxALIGN_RIGHT | wxALIGN_CENTRE_HORIZONTAL |
-                      wxALIGN_BOTTOM | wxALIGN_CENTRE_VERTICAL))
-            showInvalidFlags("wxEXPAND overrides alignment flags in box sizers");
-   }      
+   }
+   for (auto p : children)
+      p->checkSizerFlags();
 }
 
 static std::string to_hex_string(int v)
@@ -323,6 +332,7 @@ static void initFlagNameMap()
             ("wxGROW", wxGROW)
             ("wxSHAPED", wxSHAPED)
             ("wxEXPAND", wxEXPAND)
+            ("wxALL", wxALL)
             ;
 }
 
@@ -336,6 +346,7 @@ int wxFB::Object::getFlags() const
    int flags = 0;
    for (auto flagName : flagNames)
    {
+      stackoverflow::trim(flagName); // trim whitespace
       if ("" == flagName)
          continue;
       auto p = flagNameMap.find(flagName);
