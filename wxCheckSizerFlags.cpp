@@ -45,6 +45,7 @@ struct Object
    Properties properties;
 
    std::string getProperty(const std::string& name) const;
+   int getIntProperty(const std::string& name) const;
    void checkSizerFlags();
    bool isSizerType() const { return ends_with(className, "Sizer"); }
    bool isGridSizerType() const { return ends_with(className, "GridSizer"); }
@@ -190,7 +191,27 @@ void wxFB::Object::checkSizerFlags()
    if (isGridSizerType())
    {
       // check for too many children for fixed column+row count
+      const int rows = getIntProperty("rows");
+      const int cols = getIntProperty("cols");
+      if ((0 != rows) && (0 != cols))
+      {
+         const int capacity = rows * cols;
+         if (children.size() > capacity)
+            showInvalidFlags("too many children in wxGridSizer");
+      }
       // check for children with EXPAND to be able to expand
+      for (auto p : children)
+      {
+         const int flags = p->getFlags();
+         if (flags & wxEXPAND)
+         {
+            const bool ok = !(flags & (wxALIGN_BOTTOM | wxALIGN_CENTRE_VERTICAL)) || 
+                            !(flags & (wxALIGN_RIGHT | wxALIGN_CENTRE_HORIZONTAL));
+            if (!ok)
+               showInvalidFlags("wxEXPAND flag in child sizer will be overridden by alignment flags, remove "
+                                "either wxEXPAND or the alignment in at least one direction");
+         }
+      }
    }
    if (isBoxSizerType())
    {
@@ -312,3 +333,8 @@ std::string wxFB::Object::getProperty(const std::string& name) const
    return "";
 }
 
+int wxFB::Object::getIntProperty(const std::string& name) const
+{
+   const std::string value = getProperty(name);
+   return std::stoi(value);
+}
