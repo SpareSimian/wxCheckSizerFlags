@@ -299,14 +299,13 @@ void wxFB::Object::assertValidSizerFlags() const
       showInvalidFlags("invalid flags not within " + to_hex_string(flags));
 }
 
-// this returns a vector of string_views so essentially pointers into
-// the original string for efficiency. With an empty input string, the
+// This returns a vector of strings. With an empty input string, the
 // result will include a single empty string.
 
 static auto splitString(const std::string& in, char sep)
 {
    std::vector<std::string> r;
-   r.reserve(std::count(in.begin(), in.end(), sep) + 1); // optional
+   r.reserve(std::count(in.begin(), in.end(), sep) + 1); // preallocate
    for (auto p = in.begin();; ++p) {
       auto q = p;
       p = std::find(p, in.end(), sep);
